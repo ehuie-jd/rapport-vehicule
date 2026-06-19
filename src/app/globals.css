@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Safe area for mobile notch/home bar */
+@supports (padding: max(0px)) {
+  .pb-safe {
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+  }
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Better touch targets on mobile */
+button, select, input, textarea {
+  touch-action: manipulation;
+}
+
+/* Prevent text size adjust on iOS */
+body {
+  -webkit-text-size-adjust: 100%;
+}
