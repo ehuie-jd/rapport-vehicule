@@ -2,25 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Safe area for mobile notch/home bar */
-@supports (padding: max(0px)) {
-  .pb-safe {
-    padding-bottom: max(12px, env(safe-area-inset-bottom));
-  }
-}
-
-/* Smooth scrolling */
-html {
-  scroll-behavior: smooth;
-  -webkit-tap-highlight-color: transparent;
-}
-
-/* Better touch targets on mobile */
-button, select, input, textarea {
-  touch-action: manipulation;
-}
-
-/* Prevent text size adjust on iOS */
 body {
-  -webkit-text-size-adjust: 100%;
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #faf8f5;
+}
+
+/* Gère l'espace sécurisé en bas sur les iPhone récents */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
 }
