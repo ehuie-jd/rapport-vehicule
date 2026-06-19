@@ -8,15 +8,24 @@ import {
   Phone, Video, MoreVertical, CheckCheck, TrendingUp
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
+import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, onSnapshot, addDoc, deleteDoc, doc, setDoc } from 'firebase/firestore';
 
-// --- Configuration Firebase ---
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { projectId: "demo-project" };
+// --- Configuration Firebase Intégrée ---
+const firebaseConfig = {
+  apiKey: "AIzaSyAZrIZAkt4EHRYxRZZ0sbaK1gGERcNplIY",
+  authDomain: "rapport-vehicule-bd4c6.firebaseapp.com",
+  databaseURL: "https://rapport-vehicule-bd4c6-default-rtdb.firebaseio.com",
+  projectId: "rapport-vehicule-bd4c6",
+  storageBucket: "rapport-vehicule-bd4c6.firebasestorage.app",
+  messagingSenderId: "770858666949",
+  appId: "1:770858666949:web:bdd636cff310c68c4d59ac",
+  measurementId: "G-PRXEN0M1KQ"
+};
+
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
 // --- Constantes & Données par défaut ---
 const LISTE_MOTIFS = [
@@ -97,6 +106,7 @@ export default function App() {
   const [toast, setToast] = useState('');
   const [isGeneratingImg, setIsGeneratingImg] = useState(false);
   const [itemToDelete, setItemToDelete] = useState(null);
+  const [firebaseErrorMsg, setFirebaseErrorMsg] = useState('');
   
   const [owners, setOwners] = useState(PROPRIETAIRES_PAR_DEFAUT);
   const [availableVehicles, setAvailableVehicles] = useState(VEHICULES_PAR_DEFAUT);
@@ -111,18 +121,18 @@ export default function App() {
   const [copied, setCopied] = useState(false);
   const [searchFilter, setSearchFilter] = useState('');
 
-  // 1. Initialisation Auth (Firebase Rule 3)
+  // 1. Initialisation Auth (Connexion Anonyme pour garder le même fonctionnement)
   useEffect(() => {
     const initAuth = async () => {
       try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
+        await signInAnonymously(auth);
       } catch (error) {
         console.error("Erreur d'authentification:", error);
-        showToast("⚠️ Problème de connexion");
+        if (error.code === 'auth/configuration-not-found' || error.code === 'auth/operation-not-allowed') {
+          setFirebaseErrorMsg("Activez l'authentification dans Firebase : Console > Authentication > Onglet Sign-in method > Fournisseur 'Anonyme'.");
+        } else {
+          showToast("⚠️ Problème de connexion Firebase");
+        }
       }
     };
     initAuth();
@@ -130,10 +140,11 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // 2. Fetch Data (Firebase Rules 1 & 2)
+  // 2. Fetch Data Firestore
   useEffect(() => {
     if (!user) return;
-    const q = collection(db, 'artifacts', appId, 'users', user.uid, 'reports');
+    // Chemin standard pour un vrai projet Firebase: users/{uid}/reports
+    const q = collection(db, 'users', user.uid, 'reports');
     const unsubscribe = onSnapshot(q, 
       (snapshot) => {
         const fetchedReports = [];
@@ -183,18 +194,30 @@ export default function App() {
 
   const saveToHistory = async () => {
     if (!user) {
-      showToast('❌ Erreur: Non connecté');
+      showToast('⚠️ Mode Local (Firebase non connecté)');
+      const dataToSave = { ...formData, id: editingId || Date.now().toString(), updatedAt: new Date().toISOString() };
+      if (!editingId) dataToSave.createdAt = new Date().toISOString();
+      
+      if (editingId) {
+        setHistory(prev => prev.map(item => item.id === editingId ? dataToSave : item));
+        showToast('📌 Rapport mis à jour (Localement)');
+      } else {
+        setHistory(prev => [dataToSave, ...prev].sort((a, b) => new Date(b.reportDate).valueOf() - new Date(a.reportDate).valueOf()));
+        showToast('📌 Nouveau rapport enregistré (Localement)');
+        resetForm();
+      }
+      setActiveTab('history');
       return;
     }
     try {
       const dataToSave = { ...formData, updatedAt: new Date().toISOString() };
       
       if (editingId) {
-        await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'reports', editingId), dataToSave, { merge: true });
+        await setDoc(doc(db, 'users', user.uid, 'reports', editingId), dataToSave, { merge: true });
         showToast('📌 Rapport mis à jour avec succès');
       } else {
         dataToSave.createdAt = new Date().toISOString();
-        await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'reports'), dataToSave);
+        await addDoc(collection(db, 'users', user.uid, 'reports'), dataToSave);
         showToast('📌 Nouveau rapport enregistré');
         resetForm();
       }
@@ -240,7 +263,7 @@ export default function App() {
   const confirmDelete = async () => {
     if (!user || !itemToDelete) return;
     try {
-      await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'reports', itemToDelete));
+      await deleteDoc(doc(db, 'users', user.uid, 'reports', itemToDelete));
       showToast('🗑️ Rapport supprimé définitivement');
       if (editingId === itemToDelete) resetForm();
       setItemToDelete(null);
@@ -321,7 +344,6 @@ export default function App() {
     const formattedDate = new Date(d.reportDate).toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     let text = "";
 
-    // Exact matching emojis with your image mockup (📁, 🏢, 📅, etc.)
     text += `📁 *RAPPORT DE GESTION* (${d.reportType.toUpperCase()})\n`;
     text += `🏢 *Propriété :* ${owner?.company || 'Non spécifié'} (${owner?.name})\n`;
     text += `📅 *Date :* ${formattedDate}\n`;
@@ -478,14 +500,12 @@ export default function App() {
     });
   }, [history, searchFilter, owners]);
 
-  // --- Dynamic Color Styles Renderer for Text Preview ---
   const renderFormattedBubbleText = (rawText) => {
     const lines = rawText.split('\n');
     return lines.map((line, i) => {
       let textClass = "text-slate-800";
       let containerClass = "min-h-[1.2rem] leading-relaxed";
       
-      // Syntax-highlighting classification depending on the section emojis
       if (line.includes('📁') || line.includes('🏢') || line.includes('📅')) {
         textClass = "text-slate-700 font-medium";
       } else if (line.includes('💰') || line.includes('TOTAL RECETTE') || line.includes('💵')) {
@@ -509,7 +529,6 @@ export default function App() {
         textClass = "text-emerald-300/60 font-light select-none";
       }
 
-      // Safe client-side markdown emulation (*bold* -> HTML strong, _italic_ -> HTML em)
       const formatMarkdown = (str) => {
         return str
           .replace(/&/g, "&amp;")
@@ -532,6 +551,14 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#faf8f5] font-sans text-slate-800 pb-20 lg:pb-8 flex flex-col">
       
+      {/* --- BANNIÈRE ERREUR FIREBASE --- */}
+      {firebaseErrorMsg && (
+        <div className="bg-red-600 text-white px-4 py-3 text-sm font-bold text-center flex items-center justify-center gap-2 z-50 shadow-md">
+          <AlertTriangle size={18} />
+          {firebaseErrorMsg}
+        </div>
+      )}
+
       {/* --- TOAST --- */}
       {toast && (
         <div className="fixed top-6 left-1/2 transform -translate-x-1/2 bg-amber-900 text-yellow-100 px-6 py-3 rounded-full shadow-2xl z-50 font-medium animate-bounce border-2 border-amber-600 flex items-center gap-2 text-sm">
